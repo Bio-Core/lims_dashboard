@@ -1,6 +1,5 @@
 # Python 2.7.13 Requirements #
 
-anytree==2.2.1
 backports-abc==0.5
 bokeh==0.12.10
 certifi==2017.7.27.1
@@ -18,7 +17,6 @@ pandas==0.20.3
 pymongo==3.5.1
 python-dateutil==2.6.1
 pytz==2017.2
-PyYAML==3.12
 requests==2.18.4
 scipy==1.0.0
 singledispatch==3.4.0.3
