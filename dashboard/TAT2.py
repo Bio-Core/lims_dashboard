@@ -1,5 +1,5 @@
 from bokeh.plotting import *
-from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Slider, Button, Div, DateRangeSlider
+from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Slider, Button, Div
 from bokeh.palettes import Category20 # color palette
 from bokeh.core.properties import value
 from bokeh.transform import dodge
@@ -15,9 +15,9 @@ from bokeh.models.callbacks import CustomJS
 
 # parameters
 dateReported_col_str = 'Date Reported'
-switch = 1
+switch = 2
 fig_width = 600
-fig_height = 350
+fig_height = 600
 
 passed_df = pandas.DataFrame(); qcfailed_df = pandas.DataFrame(); delayed_df = pandas.DataFrame()
 
@@ -37,6 +37,7 @@ def modify_doc(doc):
         current_project_name = project_select.value
         current_year = str(year_select.value)
         current_month = str(month_select.value)
+
         month_select.options = availMonths[current_year]
 
         if current_project_name == 'Overall':
@@ -52,15 +53,15 @@ def modify_doc(doc):
             filename_prefix = '['+current_lab_name+']['+current_project_name+']['+current_year+'-'+current_month+']'
             passed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_passed.csv'], 
-                      'csv_str':[passed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
+                      'csv_str':[passed_df.to_csv().replace('\\n','\\\n')]})), 
                 code=download_js)
             qcfailed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_qcfailed.csv'], 
-                      'csv_str':[qcfailed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
+                      'csv_str':[qcfailed_df.to_csv().replace('\\n','\\\n')]})), 
                 code=download_js)
             delayed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_delayed.csv'], 
-                      'csv_str':[delayed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
+                      'csv_str':[delayed_df.to_csv().replace('\\n','\\\n')]})), 
                 code=download_js)
             downloads = row(download_div, passed_dwnld_bttn, Spacer(width=25), qcfailed_dwnld_bttn, Spacer(width=25), delayed_dwnld_bttn)    
         
@@ -68,30 +69,41 @@ def modify_doc(doc):
         doc.add_root(column(controls,fig,downloads))
 
     download_js = """
-        var data = source.get('data')
-        var filename = data['filename'][0]
-        var csv_str = data['csv_str'][0]
-        var blob = new Blob([csv_str], { type: 'text/csv;charset=utf-8;' })
+    
+    var data = source.get('data')
+    var filename = data['filename'][0]
+    var csv_str = data['csv_str'][0]
+    var blob = new Blob([csv_str], { type: 'text/csv;charset=utf-8;' })
 
-        if (navigator.msSaveBlob) { // IE 10+
-            navigator.msSaveBlob(blob, filename)
-        } else {
-            var link = document.createElement("a")
-            if (link.download !== undefined) { // feature detection
-                // Browsers that support HTML5 download attribute
-                var url = URL.createObjectURL(blob)
-                link.setAttribute("href", url)
-                link.setAttribute("download", filename)
-                link.style.visibility = 'hidden'
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-        }}"""
+    if (navigator.msSaveBlob) { // IE 10+
+        navigator.msSaveBlob(blob, filename)
+    } else {
+        var link = document.createElement("a")
+        if (link.download !== undefined) { // feature detection
+            // Browsers that support HTML5 download attribute
+            var url = URL.createObjectURL(blob)
+            link.setAttribute("href", url)
+            link.setAttribute("download", filename)
+            link.style.visibility = 'hidden'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+
+      }}
+    """
+
+    
 
     lab_select.on_change('value', refreshDoc_callback)
     project_select.on_change('value', refreshDoc_callback)
     year_select.on_change('value', refreshDoc_callback)
     month_select.on_change('value', refreshDoc_callback)
+
+
+
+
+    # qcfailed_dwnld_bttn.js_on_click(qcfailed_dwnld_callback)
+    # delayed_dwnld_bttn.js_on_click(delayed_dwnld_callback)
 
     # initialize document by forcing callback once in the beginning
     refreshDoc_callback(None, None, None) 
@@ -171,12 +183,12 @@ def prep_project_data(current_project_name):
 
     # filter QC failed & delayed data
     qcfailed_idx = (df['QC status'] == 'True')
-    qcfailed_df = df.where(qcfailed_idx).dropna()
-    passed_df = df.mask(qcfailed_idx).dropna()
+    qcfailed_df = df.where(qcfailed_idx).dropna().reset_index()
+    passed_df = df.mask(qcfailed_idx).dropna().reset_index()
 
     delayed_idx = (passed_df['Rec>Rep'] > 50)
-    delayed_df = passed_df.where(delayed_idx).dropna()
-    passed_df = passed_df.mask(delayed_idx).dropna()
+    delayed_df = passed_df.where(delayed_idx).dropna().reset_index()
+    passed_df = passed_df.mask(delayed_idx).dropna().reset_index()
 
     # where plot source data will be prepped
     project_data = {}

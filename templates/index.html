@@ -1,35 +1,36 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <title>Embed Demo</title>
     <meta charset="utf-8">
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
-    <title>Embed Demo</title>
-
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
   </head>
   <body>
 
-    <h1>Dashboard</h1>
-
-    <link href="/static/css/index.css" rel="stylesheet">
-
-    <div class="plot" style="display: inline">
-      
-      <table>
-        <tr>
-          <th>Turn Around Time</th>
-          <th>QC</th>
-        </tr>
-        <tr>
-          <td>{{ plot_script1|safe }}</td>
-          <td>{{ plot_script2|safe }}</td>
-        </tr>
-
-      </table>
+    <div class="container-fluid">
+      <h1>Dashboard</h1>
     </div>
+    
+    <!-- <link href="/static/css/index.css" rel="stylesheet"> -->
 
-
-
-
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-lg-6">
+          Turn Around Time ver.1
+          {{ plot_script1|safe }}
+        </div>
+        <div class="col-lg-6">
+          Turn Around Time ver.2
+          {{ plot_script2|safe }}
+        </div>
+      </div>
+    </div>
+      
+    <div class="container-fluid">
+      <p>QC</p>
+      {{ plot_script3|safe }}
+    </div>
 
   </body>
 </html>

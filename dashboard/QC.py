@@ -1,23 +1,17 @@
 from bokeh.plotting import *
 from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange
-from bokeh.resources import INLINE
-from bokeh.embed import components, server_document
-from bokeh.transform import factor_cmap
-from bokeh.palettes import Category20
+from bokeh.palettes import Category20 # color palette
 from bokeh.core.properties import value
 from bokeh.transform import dodge
-from bokeh.models import Select, Button
+from bokeh.models import Select
 from bokeh.layouts import row, column
 from bokeh.layouts import column
-from bokeh.models import ColumnDataSource, Slider
 from bokeh.plotting import figure
 import numpy as NP
 import pandas
-import random
 from datetime import datetime as DT
 from collections import defaultdict
-import re
-import csv
+import re # regular expression module
 from math import log10
 import itertools
 
