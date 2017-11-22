@@ -5,28 +5,34 @@ from bokeh.core.properties import value
 from bokeh.transform import dodge
 from bokeh.layouts import row, column, layout, Spacer
 from bokeh.plotting import figure
+from bokeh.models.callbacks import CustomJS
 import numpy as NP
 import pandas
 from datetime import datetime as DT
 import re # regular expression module
 from pymongo import MongoClient
 from functools import reduce
-from bokeh.models.callbacks import CustomJS
 
 # parameters
 dateReported_col_str = 'Date Reported'
-switch = 1
+plot_switch = 1 # 1 or 2
 fig_width = 600
 fig_height = 350
 
+# global dfs
 passed_df = pandas.DataFrame(); qcfailed_df = pandas.DataFrame(); delayed_df = pandas.DataFrame()
 
 def modify_doc(doc):
 
+    # top first row controls
     lab_select = Select(value=current_lab_name, title='Lab', options=lab_names,width=140)
     project_select = Select(value=current_project_name, title='Project', options=selection_names,width=140)
-    year_select = Select(value=current_year, title='Year', options=availMonths.keys(),width=140)
-    month_select = Select(value=current_month, title='Month', options=availMonths[current_year],width=140)
+
+    # top second row controls
+    overall_year_select = Select(value=overall_current_year, title='Year', options=overall_avail_dates_dict.keys(),width=140)
+    overall_month_select = Select(value=overall_current_month, title='Month', options=overall_avail_dates_dict[overall_current_year],width=140)
+
+    # bottom row downloadable sheets
     download_div = Div(text='Downloadable Datasheet: ', width=180)
     passed_dwnld_bttn = Button(label='Passed', width=80)
     qcfailed_dwnld_bttn = Button(label='QC Failed', width=80)
@@ -35,21 +41,21 @@ def modify_doc(doc):
     def refreshDoc_callback(attr, old, new):
         current_lab_name = lab_select.value
         current_project_name = project_select.value
-        current_year = str(year_select.value)
-        current_month = str(month_select.value)
-        month_select.options = availMonths[current_year]
+        overall_current_year = str(overall_year_select.value)
+        overall_current_month = str(overall_month_select.value)
+        overall_month_select.options = overall_avail_dates_dict[overall_current_year]
 
         if current_project_name == 'Overall':
-            controls = row(children=[lab_select, Spacer(width=20), project_select, Spacer(width=40), year_select, Spacer(width=20), month_select])
-            overall_data = prep_overall_data(current_year ,current_month)
+            controls = row(children=[lab_select, Spacer(width=20), project_select, Spacer(width=40), overall_year_select, Spacer(width=20), overall_month_select])
+            overall_data = prep_overall_data(overall_current_year ,overall_current_month)
             fig = make_overall_fig(overall_data)
             downloads = row(Spacer())
-        else:
+        else: # individual project
             controls = row(children=[lab_select, Spacer(width=20), project_select])
             global passed_df, qcfailed_df, delayed_df
             project_data, passed_df, qcfailed_df, delayed_df = prep_project_data(current_project_name)
             fig = make_project_fig(project_data)
-            filename_prefix = '['+current_lab_name+']['+current_project_name+']['+current_year+'-'+current_month+']'
+            filename_prefix = '['+current_lab_name+']['+current_project_name+'][entire_history]'
             passed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_passed.csv'], 
                       'csv_str':[passed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
@@ -90,15 +96,15 @@ def modify_doc(doc):
 
     lab_select.on_change('value', refreshDoc_callback)
     project_select.on_change('value', refreshDoc_callback)
-    year_select.on_change('value', refreshDoc_callback)
-    month_select.on_change('value', refreshDoc_callback)
+    overall_year_select.on_change('value', refreshDoc_callback)
+    overall_month_select.on_change('value', refreshDoc_callback)
 
     # initialize document by forcing callback once in the beginning
     refreshDoc_callback(None, None, None) 
 
-def prep_overall_data(current_year,current_month):
+def prep_overall_data(overall_current_year,overall_current_month):
     
-    target_x = (current_year, current_month)
+    target_x = (overall_current_year, overall_current_month)
 
     project_datas = map(lambda project_name: (project_name, prep_project_data(project_name)[0]), project_names)
 
@@ -213,7 +219,7 @@ def make_project_fig(project_data):
     # color palette
     stages_palette = Category20[20][0:len(stages)]
     
-    if switch==1:
+    if plot_switch==1:
 
         # create figure
         fig = figure(x_range=FactorRange(*project_data['x']), 
@@ -259,7 +265,7 @@ def make_project_fig(project_data):
         fig.toolbar.active_drag=pan
         fig.toolbar_location=None
 
-    elif switch==2:
+    elif plot_switch==2:
 
         # individual plot dimensions
         plot_width = fig_width; plot_height = int( (float(fig_height) / len(stages)) )
@@ -317,28 +323,34 @@ def make_project_fig(project_data):
 
     return fig
 
-def scan_availMonths(project_names):
-    
-    cursors = map(lambda project_name: db[project_name].find(), project_names)
-    dfs = map(lambda cursor: pandas.DataFrame(list(cursor)), cursors)
-    
-    allDates = map(lambda df: df[dateReported_col_str].map(lambda string: DT.strptime(string, '%Y-%m-%d')), dfs)
-    allDates = reduce(lambda accm,x: accm.append(x, ignore_index=True), allDates)
+def scan_project_avail_dates(project_name):
+    cursor = db[project_name].find()
+    df = pandas.DataFrame(list(cursor))
+    avail_dates = df[dateReported_col_str].map(lambda unicode_str: str(unicode_str[0:7])).unique().tolist() # take only year and month part of date string
+    return avail_dates
+
+def scan_overall_avail_dates(project_names):
+    mapped = map(lambda project_name: scan_project_avail_dates(project_name), project_names)
+    reduced = reduce(lambda accm,x: accm+x, mapped)
+    avail_dates = list(set(reduced)) # set() is essentially unique() operation
+    return avail_dates
+
+def build_avail_dates_dict(avail_dates):
+    year_month_strs = pandas.Series(avail_dates)
+    allDates = year_month_strs.map(lambda year_month_str: DT.strptime(year_month_str, '%Y-%m'))
     allDates_df = pandas.DataFrame({
                     'year':allDates.map(lambda date: str(date.year)),
                     'month':allDates.map(lambda date: str(date.month))
                   })
     years = sorted(allDates_df['year'].unique().tolist())
-    
-    def get_availMonths(year): return sorted(allDates_df['month'][allDates_df['year']==year].unique().tolist())
-    
-    availMonths = dict(map(lambda year: (year, get_availMonths(year)) , years))
-    # availMonths = map(lambda key: zip([key]*len(availMonths[key]), availMonths[key]), availMonths.keys()) 
-    
-    return availMonths
+            
+    def get_avail_months(year): return sorted(allDates_df['month'][allDates_df['year']==year].unique().tolist())
+        
+    avail_dates_dict = dict(map(lambda year: (year, get_avail_months(year)) , years))
+    return avail_dates_dict
 
 # helper function for setting multiple attributes
-def setattrs(_self, **kwargs):
+def setattrs(_self, **kwargs): 
     for k,v in kwargs.items(): setattr(_self, k, v)
 
 ## Initializations ##
@@ -354,16 +366,16 @@ collections.remove('system.indexes')
 
 lab_names = ['AMDL', 'TGH']
 project_names = map(str, collections)
-project_names.remove('Agile_TAT') # temporary due to flaw in database
+project_names.remove('Agile_TAT') # temporary exclusion due to data defect in current mongodb
 selection_names = project_names[:] # [:] means copy by value (as opposed to copy by reference)
 selection_names.insert(0, 'Overall')
 
 current_lab_name = lab_names[0]
 current_project_name = selection_names[2]
 
-availMonths = scan_availMonths(project_names)
-current_year = availMonths.keys()[0] # default year
-current_month = availMonths[current_year][0] # default month
+overall_avail_dates_dict = build_avail_dates_dict(scan_overall_avail_dates(project_names))
+overall_current_year = overall_avail_dates_dict.keys()[0] # default year
+overall_current_month = overall_avail_dates_dict[overall_current_year][0] # default month
 
 # expected fields to be seen in mongodb tables
 stages = ['Rec>Ext', 'Ext>Test', 'Test>Com', 'Com>Rep', 'Rec>Rep']
