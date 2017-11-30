@@ -19,8 +19,3 @@ EXPOSE 8000
 EXPOSE 8001
 
 CMD ["python", "/home/app/app.py"]
-
-
-# docker commands to run:
-# sudo docker build -t lims_dashboard .
-# sudo docker run -d --name lims_dashboard -p 8000:8000 -p 8001:8001 -v /home/coop2/app/:/home/app/:ro lims_dashboard

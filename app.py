@@ -20,7 +20,7 @@ container_dashboard_port = 8000
 host_bokehServer_port = 8001
 container_bokehServer_port = 8001
 
-# application handlers and urls
+# application handlers and url substrings
 TAT_app = Application(FunctionHandler(TAT.modify_doc))
 TAT_app_url = 'TAT'
 TAT2_app = Application(FunctionHandler(TAT2.modify_doc))
@@ -30,14 +30,19 @@ QC_app_url = 'QC'
 
 # start Bokeh Server Threads
 def bokehServer_worker():
-    server = Server({'/'+TAT_app_url: TAT_app, '/'+TAT2_app_url: TAT2_app, '/'+QC_app_url: QC_app }, port=container_bokehServer_port, allow_websocket_origin=[host_ip+':'+str(host_dashboard_port),host_ip+':'+str(host_bokehServer_port)])
+    server = Server({'/'+TAT_app_url: TAT_app, 
+                     '/'+TAT2_app_url: TAT2_app, 
+                     '/'+QC_app_url: QC_app }, 
+                    port=container_bokehServer_port, 
+                    # following defines through which URLs the user is allowed to connect to these apps
+                    allow_websocket_origin=[host_ip+':'+str(host_dashboard_port), host_ip+':'+str(host_bokehServer_port)])
     server.start()
     server.io_loop.start()
 
 from threading import Thread
 Thread(target=bokehServer_worker).start()
 
-# main dashboard content
+# generate dashboard content upon http connection
 @app.route('/')
 def index():
 

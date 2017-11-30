@@ -12,8 +12,9 @@ from datetime import datetime as DT
 import re # regular expression module
 from pymongo import MongoClient
 from functools import reduce
+from common_functions import setattrs
 
-# parameters
+# some parameters
 dateReported_col_str = 'Date Reported'
 plot_switch = 1 # 1 or 2
 fig_width = 600
@@ -23,57 +24,60 @@ fig_height = 350
 passed_df = pandas.DataFrame(); qcfailed_df = pandas.DataFrame(); delayed_df = pandas.DataFrame()
 
 def modify_doc(doc):
+    """
+    Function to be registered into bokeh application server thread
+    """
 
-    # top first row controls
+    # top row controls (dropdown menus)
     lab_select = Select(value=current_lab_name, title='Lab', options=lab_names,width=140)
     project_select = Select(value=current_project_name, title='Project', options=selection_names,width=140)
-
-    # top second row controls
     overall_year_select = Select(value=overall_current_year, title='Year', options=overall_avail_dates_dict.keys(),width=140)
     overall_month_select = Select(value=overall_current_month, title='Month', options=overall_avail_dates_dict[overall_current_year],width=140)
 
-    # bottom row downloadable sheets
-    download_div = Div(text='Downloadable Datasheet: ', width=180)
+    # bottom row downloadable sheets (buttons)
+    dwnld_div = Div(text='Downloadable Datasheet: ', width=180)
     passed_dwnld_bttn = Button(label='Passed', width=80)
     qcfailed_dwnld_bttn = Button(label='QC Failed', width=80)
     delayed_dwnld_bttn = Button(label='Delayed', width=80)
 
     def refreshDoc_callback(attr, old, new):
+        # obtain selected dropdown menu values
         current_lab_name = lab_select.value
         current_project_name = project_select.value
         overall_current_year = str(overall_year_select.value)
         overall_current_month = str(overall_month_select.value)
         overall_month_select.options = overall_avail_dates_dict[overall_current_year]
 
+        # generate different figure and control panel composition based on dropdown menu selected
         if current_project_name == 'Overall':
             controls = row(children=[lab_select, Spacer(width=20), project_select, Spacer(width=40), overall_year_select, Spacer(width=20), overall_month_select])
-            overall_data = prep_overall_data(overall_current_year ,overall_current_month)
-            fig = make_overall_fig(overall_data)
-            downloads = row(Spacer())
+            fig = plot_overall_data(prep_overall_data(overall_current_year, overall_current_month))
+            downloads = row(Spacer()) # empty space
         else: # individual project
             controls = row(children=[lab_select, Spacer(width=20), project_select])
             global passed_df, qcfailed_df, delayed_df
             project_data, passed_df, qcfailed_df, delayed_df = prep_project_data(current_project_name)
-            fig = make_project_fig(project_data)
+            fig = plot_project_data(project_data)
             filename_prefix = '['+current_lab_name+']['+current_project_name+'][entire_history]'
             passed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_passed.csv'], 
                       'csv_str':[passed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=download_js)
+                code=dwnld_csv_js)
             qcfailed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_qcfailed.csv'], 
                       'csv_str':[qcfailed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=download_js)
+                code=dwnld_csv_js)
             delayed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_delayed.csv'], 
                       'csv_str':[delayed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=download_js)
-            downloads = row(download_div, passed_dwnld_bttn, Spacer(width=25), qcfailed_dwnld_bttn, Spacer(width=25), delayed_dwnld_bttn)    
+                code=dwnld_csv_js)
+            downloads = row(dwnld_div, passed_dwnld_bttn, Spacer(width=25), qcfailed_dwnld_bttn, Spacer(width=25), delayed_dwnld_bttn)    
         
         doc.clear()
         doc.add_root(column(controls,fig,downloads))
 
-    download_js = """
+    # javascript used for initiating csv datasheet download
+    dwnld_csv_js = """
         var data = source.get('data')
         var filename = data['filename'][0]
         var csv_str = data['csv_str'][0]
@@ -94,6 +98,7 @@ def modify_doc(doc):
                 document.body.removeChild(link)
         }}"""
 
+    # register callback function to call upon change detected in dropwdown menu
     lab_select.on_change('value', refreshDoc_callback)
     project_select.on_change('value', refreshDoc_callback)
     overall_year_select.on_change('value', refreshDoc_callback)
@@ -103,23 +108,32 @@ def modify_doc(doc):
     refreshDoc_callback(None, None, None) 
 
 def prep_overall_data(overall_current_year,overall_current_month):
-    
-    target_x = (overall_current_year, overall_current_month)
+    """
+    Prepare median TAT data in each stages for all projects in one plot, for a specific year-month
+    """
 
+    # the target year-month to retrieve data from all projects
+    target_x = (overall_current_year, overall_current_month)
+    # retrieve all project data, of all history
     project_datas = map(lambda project_name: (project_name, prep_project_data(project_name)[0]), project_names)
 
+    # filter function for the target year-month
     def filter(project_data):
         idx = project_data['x'].index(target_x)
         data = map(lambda stage: project_data[stage][idx], stages)
         return data
             
+    # apply filter for each project
     overall_data = dict(map(lambda (project_name, project_data): (project_name, filter(project_data)), project_datas))
     overall_data['x'] = stages
 
     return overall_data
 
-def make_overall_fig(overall_data):
-    
+def plot_overall_data(overall_data):
+    """
+    Plots median TAT data obtained in prep_overall_data() function
+    """
+
     # color palette
     projects_palette = Category20[20][0:len(stages)]
 
@@ -165,6 +179,9 @@ def make_overall_fig(overall_data):
     return fig
 
 def prep_project_data(current_project_name):
+    """
+    Plots median TAT data in each stage for one project, for its entire history
+    """
 
     # load db data into pandas dataframe
     cursor = db[current_project_name].find()
@@ -190,6 +207,7 @@ def prep_project_data(current_project_name):
     # y-data:
     nodata_stages = [] # stages with nodata are to be removed from plotting
     
+    # calculate medians for all stages, for all years, for all months
     for stage in stages:
         medians = []
         for year in years:
@@ -197,7 +215,7 @@ def prep_project_data(current_project_name):
                 logical_idx = dt_series.map(lambda dt: (dt.year == year) & (dt.month == month))
                 counts = passed_df.loc[logical_idx, stage] # filter by logical index
                 medians.append(counts.median())
-        if NP.all(NP.isnan(medians)):
+        if NP.all(NP.isnan(medians)): # if data found is all nan, exclude this stage from data entries
             nodata_stages.append(stage)
         else:
             project_data[stage] = medians
@@ -214,11 +232,15 @@ def prep_project_data(current_project_name):
     
     return project_data, passed_df, qcfailed_df, delayed_df
 
-def make_project_fig(project_data):
-    
+def plot_project_data(project_data):
+    """
+    Plots median TAT data prepared in prep_project_data() function.
+    """
+
     # color palette
     stages_palette = Category20[20][0:len(stages)]
     
+    # plotting option #1
     if plot_switch==1:
 
         # create figure
@@ -265,6 +287,7 @@ def make_project_fig(project_data):
         fig.toolbar.active_drag=pan
         fig.toolbar_location=None
 
+    # plotting option #2
     elif plot_switch==2:
 
         # individual plot dimensions
@@ -323,19 +346,32 @@ def make_project_fig(project_data):
 
     return fig
 
-def scan_project_avail_dates(project_name):
-    cursor = db[project_name].find()
-    df = pandas.DataFrame(list(cursor))
-    avail_dates = df[dateReported_col_str].map(lambda unicode_str: str(unicode_str[0:7])).unique().tolist() # take only year and month part of date string
-    return avail_dates
-
 def scan_overall_avail_dates(project_names):
+    """
+    Scans all available unique year-month records for union of all projects.
+    """
+
     mapped = map(lambda project_name: scan_project_avail_dates(project_name), project_names)
     reduced = reduce(lambda accm,x: accm+x, mapped)
     avail_dates = list(set(reduced)) # set() is essentially unique() operation
     return avail_dates
 
+def scan_project_avail_dates(project_name):
+    """
+    Scans all available unique year-month records for a specific project.
+    """
+
+    cursor = db[project_name].find()
+    df = pandas.DataFrame(list(cursor))
+    avail_dates = df[dateReported_col_str].map(lambda unicode_str: str(unicode_str[0:7])).unique().tolist() # take only year and month part of date string
+    return avail_dates
+
 def build_avail_dates_dict(avail_dates):
+    """
+    Builds a dictionary of all available year-month records.
+    Can use on data returned from either scan_project_avail_dates() or scan_overall_avail_dates()
+    """
+    
     year_month_strs = pandas.Series(avail_dates)
     allDates = year_month_strs.map(lambda year_month_str: DT.strptime(year_month_str, '%Y-%m'))
     allDates_df = pandas.DataFrame({
@@ -349,10 +385,6 @@ def build_avail_dates_dict(avail_dates):
     avail_dates_dict = dict(map(lambda year: (year, get_avail_months(year)) , years))
     return avail_dates_dict
 
-# helper function for setting multiple attributes
-def setattrs(_self, **kwargs): 
-    for k,v in kwargs.items(): setattr(_self, k, v)
-
 ## Initializations ##
 
 # establish mongo db connection
@@ -362,7 +394,6 @@ mongoClient = MongoClient(mongoDB_ip, mongoDB_port)
 # dbs = mongoClient.database_names()
 db = mongoClient['lims']
 collections = db.collection_names()
-collections.remove('system.indexes')
 
 lab_names = ['AMDL', 'TGH']
 project_names = map(str, collections)

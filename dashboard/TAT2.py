@@ -362,7 +362,6 @@ mongoClient = MongoClient(mongoDB_ip, mongoDB_port)
 # dbs = mongoClient.database_names()
 db = mongoClient['lims']
 collections = db.collection_names()
-collections.remove('system.indexes')
 
 lab_names = ['AMDL', 'TGH']
 project_names = map(str, collections)
