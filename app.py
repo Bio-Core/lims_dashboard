@@ -4,7 +4,7 @@ from bokeh.application.handlers import FunctionHandler
 from bokeh.util.string import encode_utf8
 from bokeh.embed import server_document
 from bokeh.server.server import Server
-from dashboard import TAT, TAT2, QC
+from dashboard import TAT, QC
 
 app = Flask(__name__)
 
@@ -23,15 +23,12 @@ container_bokehServer_port = 8001
 # application handlers and url substrings
 TAT_app = Application(FunctionHandler(TAT.modify_doc))
 TAT_app_url = 'TAT'
-TAT2_app = Application(FunctionHandler(TAT2.modify_doc))
-TAT2_app_url = 'TAT2'
 QC_app = Application(FunctionHandler(QC.modify_doc))
 QC_app_url = 'QC'
 
 # start Bokeh Server Threads
 def bokehServer_worker():
     server = Server({'/'+TAT_app_url: TAT_app, 
-                     '/'+TAT2_app_url: TAT2_app, 
                      '/'+QC_app_url: QC_app }, 
                     port=container_bokehServer_port, 
                     # following defines through which URLs the user is allowed to connect to these apps
@@ -48,15 +45,13 @@ def index():
 
     # render js & div component
     script1 = server_document('http://'+host_ip+':'+str(host_bokehServer_port)+'/'+TAT_app_url)
-    script2 = server_document('http://'+host_ip+':'+str(host_bokehServer_port)+'/'+TAT2_app_url)
-    script3 = server_document('http://'+host_ip+':'+str(host_bokehServer_port)+'/'+QC_app_url)
+    script2 = server_document('http://'+host_ip+':'+str(host_bokehServer_port)+'/'+QC_app_url)
 
     # render html
     html = encode_utf8(render_template(
         'index.html',
         plot_script1=script1,
         plot_script2=script2,
-        plot_script3=script3,
     ))
 
     return html

@@ -1,5 +1,5 @@
 from bokeh.plotting import *
-from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Slider, Button, Div, DateRangeSlider
+from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Button, Div, RadioButtonGroup
 from bokeh.palettes import Category20 # color palette
 from bokeh.core.properties import value
 from bokeh.transform import dodge
@@ -16,9 +16,8 @@ from common_functions import setattrs
 
 # some parameters
 dateReported_col_str = 'Date Reported'
-plot_switch = 1 # 1 or 2
-fig_width = 600
-fig_height = 350
+plot_width = 600 # pixels
+plot_height = 600 # pixels
 
 # global dfs
 passed_df = pandas.DataFrame(); qcfailed_df = pandas.DataFrame(); delayed_df = pandas.DataFrame()
@@ -29,10 +28,13 @@ def modify_doc(doc):
     """
 
     # top row controls (dropdown menus)
-    lab_select = Select(value=current_lab_name, title='Lab', options=lab_names,width=140)
-    project_select = Select(value=current_project_name, title='Project', options=selection_names,width=140)
-    overall_year_select = Select(value=overall_current_year, title='Year', options=overall_avail_dates_dict.keys(),width=140)
-    overall_month_select = Select(value=overall_current_month, title='Month', options=overall_avail_dates_dict[overall_current_year],width=140)
+    lab_select = Select(title='Lab', options=lab_names, value=current_lab_name, width=140)
+    project_select = Select(title='Project', options=selection_names, value=current_project_name, width=140)
+
+    overall_year_select = Select(title='Year', options=overall_avail_dates_dict.keys(), value=overall_current_year, width=140)
+    overall_month_select = Select(title='Month', options=overall_avail_dates_dict[overall_current_year], value=overall_current_month, width=140)
+
+    project_plotView_radio = RadioButtonGroup(name='View', labels=['Compact','Decomposed'], active=0, sizing_mode='scale_height')
 
     # bottom row downloadable sheets (buttons)
     dwnld_div = Div(text='Downloadable Datasheet: ', width=180)
@@ -47,6 +49,7 @@ def modify_doc(doc):
         overall_current_year = str(overall_year_select.value)
         overall_current_month = str(overall_month_select.value)
         overall_month_select.options = overall_avail_dates_dict[overall_current_year]
+        project_plotView = project_plotView_radio.active
 
         # generate different figure and control panel composition based on dropdown menu selected
         if current_project_name == 'Overall':
@@ -54,23 +57,20 @@ def modify_doc(doc):
             fig = plot_overall_data(prep_overall_data(overall_current_year, overall_current_month))
             downloads = row(Spacer()) # empty space
         else: # individual project
-            controls = row(children=[lab_select, Spacer(width=20), project_select])
+            controls = row(children=[lab_select, Spacer(width=20), project_select, Spacer(width=40), project_plotView_radio])
             global passed_df, qcfailed_df, delayed_df
             project_data, passed_df, qcfailed_df, delayed_df = prep_project_data(current_project_name)
-            fig = plot_project_data(project_data)
+            fig = plot_project_data(project_data, project_plotView)
             filename_prefix = '['+current_lab_name+']['+current_project_name+'][entire_history]'
             passed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_passed.csv'], 
-                      'csv_str':[passed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=dwnld_csv_js)
+                      'csv_str':[passed_df.to_csv(index=False).replace('\\n','\\\n')]})), code=dwnld_csv_js)
             qcfailed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_qcfailed.csv'], 
-                      'csv_str':[qcfailed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=dwnld_csv_js)
+                      'csv_str':[qcfailed_df.to_csv(index=False).replace('\\n','\\\n')]})), code=dwnld_csv_js)
             delayed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_delayed.csv'], 
-                      'csv_str':[delayed_df.to_csv(index=False).replace('\\n','\\\n')]})), 
-                code=dwnld_csv_js)
+                      'csv_str':[delayed_df.to_csv(index=False).replace('\\n','\\\n')]})), code=dwnld_csv_js)
             downloads = row(dwnld_div, passed_dwnld_bttn, Spacer(width=25), qcfailed_dwnld_bttn, Spacer(width=25), delayed_dwnld_bttn)    
         
         doc.clear()
@@ -103,6 +103,7 @@ def modify_doc(doc):
     project_select.on_change('value', refreshDoc_callback)
     overall_year_select.on_change('value', refreshDoc_callback)
     overall_month_select.on_change('value', refreshDoc_callback)
+    project_plotView_radio.on_change('active', refreshDoc_callback)
 
     # initialize document by forcing callback once in the beginning
     refreshDoc_callback(None, None, None) 
@@ -139,7 +140,7 @@ def plot_overall_data(overall_data):
 
     # create figure
     fig = figure(x_range=FactorRange(*overall_data['x'], range_padding=0.2),
-                 plot_width=fig_width, plot_height=fig_height, tools='',
+                 plot_width=plot_width, plot_height=plot_height, tools='',
                  x_axis_label='Stages', y_axis_label='Median')
 
     # plot bar attributes
@@ -170,7 +171,6 @@ def plot_overall_data(overall_data):
                   zip(projects_palette, project_names))
     divContent = reduce(lambda accm,string: accm+string, spanTags)
     tooltips = '<div>'+divContent+'</div>'
-
     hover = HoverTool(tooltips=tooltips,mode='vline')
     
     fig.add_tools(hover)
@@ -232,7 +232,7 @@ def prep_project_data(current_project_name):
     
     return project_data, passed_df, qcfailed_df, delayed_df
 
-def plot_project_data(project_data):
+def plot_project_data(project_data, project_plotView):
     """
     Plots median TAT data prepared in prep_project_data() function.
     """
@@ -240,12 +240,12 @@ def plot_project_data(project_data):
     # color palette
     stages_palette = Category20[20][0:len(stages)]
     
-    # plotting option #1
-    if plot_switch==1:
+    # 'Compact' plot view option
+    if project_plotView==0:
 
         # create figure
         fig = figure(x_range=FactorRange(*project_data['x']), 
-                     plot_width=fig_width,plot_height=fig_height, tools='',
+                     plot_width=plot_width,plot_height=plot_height, tools='',
                      x_axis_label='Year-Month', y_axis_label='Median')
 
         # plot bar attributes
@@ -287,11 +287,12 @@ def plot_project_data(project_data):
         fig.toolbar.active_drag=pan
         fig.toolbar_location=None
 
-    # plotting option #2
-    elif plot_switch==2:
+    # 'Decomposed' plot view option
+    elif project_plotView==1:
 
-        # individual plot dimensions
-        plot_width = fig_width; plot_height = int( (float(fig_height) / len(stages)) )
+        # subplots dimensions
+        subplot_width = plot_width; 
+        subplot_height = int( (float(plot_height) / len(stages)) )
 
         figs = [] # figure collection
 
@@ -301,15 +302,15 @@ def plot_project_data(project_data):
             # create figure
             if idx == 0:
                 fig = figure(x_range=FactorRange(*project_data['x']), 
-                             plot_height=plot_height, plot_width=plot_width, tools='',)
+                             plot_height=subplot_height, plot_width=subplot_width, tools='',)
                 fig.xaxis.visible = True if len(stages) == 1 else False
             if (0<idx) and (idx<len(stages)-1):
                 fig = figure(x_range=figs[0].x_range, 
-                             plot_height=plot_height, plot_width=plot_width, tools='',)
+                             plot_height=subplot_height, plot_width=subplot_width, tools='',)
                 fig.xaxis.visible = False
             elif idx == len(stages)-1:
                 fig = figure(x_range=figs[0].x_range, 
-                             plot_height=plot_height, plot_width=plot_width, tools='',)
+                             plot_height=subplot_height, plot_width=subplot_width, tools='',)
                 fig.xaxis.visible = True
 
             # figure attributes
@@ -338,10 +339,10 @@ def plot_project_data(project_data):
             vbar = fig.vbar(x=dodge('x',0.4,range=fig.x_range), top=stages[idx], 
                      width=0.8, source=project_data, color=stages_palette[idx])
         
-            # register into figure collection
+            # register this subplot into figure collection
             figs.append(fig)
 
-        # assemble mutiple figure(plots) into one
+        # assemble mutiple figure(subplots) into one
         fig = gridplot([[fig] for fig in figs], sizing_mode='fixed', merge_tools=True, toolbar_location=None)
 
     return fig
