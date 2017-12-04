@@ -156,10 +156,15 @@ Or alternatively, one could access the individual bokeh server charts directly f
 1.6 Suggestions for Future Co-ops
 -----------------------------------
 
-1.6.2 Data Manipulation/Processing
+1.6.1 Data Manipulation/Processing
 ===================================
 
-- When manipulating data, writing long and ugly iteration loops can be avoided and simplified using ``map`` and ``reduce`` techniques. If you're not familiar with it, learning these will introduce you into a entire new world. (Note that these are also the core techniques used in big-data processing in distributed/parallel computing framework like Apache Hadoop/Spark.)
+- When manipulating data, writing long and ugly iteration loops could potentially be avoided and simplified using ``map`` and ``reduce`` techniques. If you're not familiar with it, learning these will introduce you into a entire new world! (Also note that these are also the core techniques used in big-data processing in distributed/parallel computing framework like Apache Hadoop/Spark.)
+
+1.6.2 Fix Bokeh Figure 'blinking'
+==================================
+
+- Currently, when you switch dataset on the TAT plot, sometimes the entire figure 'blinks' to reload, and momentarily shrinks and dislocates other HTML elements in the page. In future development, it might be a good idea to find a way to get rid of this 'blinking' issue on the python bokeh application level or may be segregate each plots into a seperate html ``iframes``, etc to have a non-shrinkable frame inside the dashboard page.
 
 1.6.3 Development Tools
 =============================

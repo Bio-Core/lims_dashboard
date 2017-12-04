@@ -1,5 +1,5 @@
 from bokeh.plotting import *
-from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Button, Div, RadioButtonGroup
+from bokeh.models import HoverTool, CrosshairTool, PanTool, WheelZoomTool, ColumnDataSource, FactorRange, Select, Button, Div, Panel, Tabs
 from bokeh.palettes import Category20 # color palette
 from bokeh.core.properties import value
 from bokeh.transform import dodge
@@ -14,12 +14,23 @@ from pymongo import MongoClient
 from functools import reduce
 from common_functions import setattrs
 
-# some parameters
-dateReported_col_str = 'Date Reported'
+# some predetermined parameters:
+
+# MongoDB
+mongoDB_ip = '192.168.2.134'
+mongoDB_port = 27017
+lims_db_name = 'lims'
+lab_names = ['AMDL', 'TGH']
+
+# some expected fields (columns) to be seen in mongodb tables
+dateReported_str = 'Date Reported'
+stages = ['Rec>Ext', 'Ext>Test', 'Test>Com', 'Com>Rep', 'Rec>Rep']
+
+# plot dimension
 plot_width = 600 # pixels
 plot_height = 600 # pixels
 
-# global dfs
+# global dfs:
 passed_df = pandas.DataFrame(); qcfailed_df = pandas.DataFrame(); delayed_df = pandas.DataFrame()
 
 def modify_doc(doc):
@@ -34,7 +45,7 @@ def modify_doc(doc):
     overall_year_select = Select(title='Year', options=overall_avail_dates_dict.keys(), value=overall_current_year, width=140)
     overall_month_select = Select(title='Month', options=overall_avail_dates_dict[overall_current_year], value=overall_current_month, width=140)
 
-    project_plotView_radio = RadioButtonGroup(name='View', labels=['Compact','Decomposed'], active=0, sizing_mode='scale_height')
+    # project_plotView_radio = RadioButtonGroup(name='View', labels=['Compact','Decomposed'], active=0, sizing_mode='scale_height')
 
     # bottom row downloadable sheets (buttons)
     dwnld_div = Div(text='Downloadable Datasheet: ', width=180)
@@ -49,7 +60,7 @@ def modify_doc(doc):
         overall_current_year = str(overall_year_select.value)
         overall_current_month = str(overall_month_select.value)
         overall_month_select.options = overall_avail_dates_dict[overall_current_year]
-        project_plotView = project_plotView_radio.active
+        # project_plotView = project_plotView_radio.active
 
         # generate different figure and control panel composition based on dropdown menu selected
         if current_project_name == 'Overall':
@@ -57,10 +68,10 @@ def modify_doc(doc):
             fig = plot_overall_data(prep_overall_data(overall_current_year, overall_current_month))
             downloads = row(Spacer()) # empty space
         else: # individual project
-            controls = row(children=[lab_select, Spacer(width=20), project_select, Spacer(width=40), project_plotView_radio])
+            controls = row(children=[lab_select, Spacer(width=20), project_select])
             global passed_df, qcfailed_df, delayed_df
             project_data, passed_df, qcfailed_df, delayed_df = prep_project_data(current_project_name)
-            fig = plot_project_data(project_data, project_plotView)
+            fig = plot_project_data(project_data)
             filename_prefix = '['+current_lab_name+']['+current_project_name+'][entire_history]'
             passed_dwnld_bttn.callback = CustomJS(args=dict(source=ColumnDataSource(
                 data={'filename': [filename_prefix+'_passed.csv'], 
@@ -103,7 +114,7 @@ def modify_doc(doc):
     project_select.on_change('value', refreshDoc_callback)
     overall_year_select.on_change('value', refreshDoc_callback)
     overall_month_select.on_change('value', refreshDoc_callback)
-    project_plotView_radio.on_change('active', refreshDoc_callback)
+    # project_plotView_radio.on_change('active', refreshDoc_callback)
 
     # initialize document by forcing callback once in the beginning
     refreshDoc_callback(None, None, None) 
@@ -188,7 +199,7 @@ def prep_project_data(current_project_name):
     df = pandas.DataFrame(list(cursor))
 
     # find all range of reported years and months
-    dt_series = df[dateReported_col_str].map(lambda string: DT.strptime(string, '%Y-%m-%d'))
+    dt_series = df[dateReported_str].map(lambda string: DT.strptime(string, '%Y-%m-%d'))
     years = dt_series.map(lambda dt: dt.year).unique().tolist()
     months = range(1,13)
 
@@ -232,7 +243,7 @@ def prep_project_data(current_project_name):
     
     return project_data, passed_df, qcfailed_df, delayed_df
 
-def plot_project_data(project_data, project_plotView):
+def plot_project_data(project_data):
     """
     Plots median TAT data prepared in prep_project_data() function.
     """
@@ -240,8 +251,7 @@ def plot_project_data(project_data, project_plotView):
     # color palette
     stages_palette = Category20[20][0:len(stages)]
     
-    # 'Compact' plot view option
-    if project_plotView==0:
+    def make_compact_fig():
 
         # create figure
         fig = figure(x_range=FactorRange(*project_data['x']), 
@@ -287,8 +297,11 @@ def plot_project_data(project_data, project_plotView):
         fig.toolbar.active_drag=pan
         fig.toolbar_location=None
 
-    # 'Decomposed' plot view option
-    elif project_plotView==1:
+        fig_compact = fig
+
+        return fig_compact
+
+    def make_decomposed_fig():
 
         # subplots dimensions
         subplot_width = plot_width; 
@@ -343,9 +356,19 @@ def plot_project_data(project_data, project_plotView):
             figs.append(fig)
 
         # assemble mutiple figure(subplots) into one
-        fig = gridplot([[fig] for fig in figs], sizing_mode='fixed', merge_tools=True, toolbar_location=None)
+        fig_decomposed = gridplot([[fig] for fig in figs], sizing_mode='fixed', merge_tools=True, toolbar_location=None)
 
-    return fig
+        return fig_decomposed
+
+    fig_compact = make_compact_fig()
+    fig_decomposed = make_decomposed_fig()
+
+    panel_compact = Panel(child=fig_compact,title='Compact')
+    panel_decomposed = Panel(child=fig_decomposed,title='Decomposed')
+
+    fig_tabbed = Tabs(tabs=[panel_compact,panel_decomposed])
+
+    return fig_tabbed
 
 def scan_overall_avail_dates(project_names):
     """
@@ -364,7 +387,7 @@ def scan_project_avail_dates(project_name):
 
     cursor = db[project_name].find()
     df = pandas.DataFrame(list(cursor))
-    avail_dates = df[dateReported_col_str].map(lambda unicode_str: str(unicode_str[0:7])).unique().tolist() # take only year and month part of date string
+    avail_dates = df[dateReported_str].map(lambda unicode_str: str(unicode_str[0:7])).unique().tolist() # take only year and month part of date string
     return avail_dates
 
 def build_avail_dates_dict(avail_dates):
@@ -389,14 +412,11 @@ def build_avail_dates_dict(avail_dates):
 ## Initializations ##
 
 # establish mongo db connection
-mongoDB_ip = '192.168.2.134'
-mongoDB_port = 27017
 mongoClient = MongoClient(mongoDB_ip, mongoDB_port)
 # dbs = mongoClient.database_names()
-db = mongoClient['lims']
+db = mongoClient[lims_db_name]
 collections = db.collection_names()
 
-lab_names = ['AMDL', 'TGH']
 project_names = map(str, collections)
 project_names.remove('Agile_TAT') # temporary exclusion due to data defect in current mongodb
 selection_names = project_names[:] # [:] means copy by value (as opposed to copy by reference)
@@ -409,5 +429,4 @@ overall_avail_dates_dict = build_avail_dates_dict(scan_overall_avail_dates(proje
 overall_current_year = overall_avail_dates_dict.keys()[0] # default year
 overall_current_month = overall_avail_dates_dict[overall_current_year][0] # default month
 
-# expected fields to be seen in mongodb tables
-stages = ['Rec>Ext', 'Ext>Test', 'Test>Com', 'Com>Rep', 'Rec>Rep']
+
