@@ -13,7 +13,7 @@ Written by Jone Kim (coop student Sept-Dec 2017)
 - From end-user's point of view, the dashboard is a single web page containing multiple interative charts. The currently developed and available charts that can be found in this web page are:
 
     1. Turn Around Time plot (quite mature)
-    2. BCR/ABL QC Levey-Jennings plot (not as mature)
+    2. BCR/ABL Quality Control Levey-Jennings plot (not as mature)
 
 - The source code can be found at:
 
@@ -166,7 +166,13 @@ Or alternatively, one could access the individual bokeh server charts directly f
 
 - Currently, when you switch dataset on the TAT plot, sometimes the entire figure 'blinks' to reload, and momentarily shrinks and dislocates other HTML elements in the page. In future development, it might be a good idea to find a way to get rid of this 'blinking' issue on the python bokeh application level or may be segregate each plots into a seperate html ``iframes``, etc to have a non-shrinkable frame inside the dashboard page.
 
-1.6.3 Development Tools
+1.6.3 Refactoring
+===================
+
+- I tried refactoring as much as possible, but there may be features that may be considered for refactoring in the future.
+- For example, currently the initialization for mongodb connection is hardcoded in ``TAT.py`` because this is the only module that uses mongodb at this time.  However, if more dashboard plots/modules that use mongodb are to be added in the future, such mongodb connection initialization could be refactored into a seperate single module.
+
+1.6.4 Development Tools
 =============================
 
 - Development of this app was done on the ``Windows 7 remote desktop``, using tools such as ``PuTTY`` (or alternatively, I recommend ``CMDer``), ``WinSCP``, ``Sublime Text 3``.
@@ -177,3 +183,13 @@ Or alternatively, one could access the individual bokeh server charts directly f
 
 - Don't forget to commit your code as you develop!
 
+1.6.4 Roozbeh's Comments
+=========================
+
+- Avoid global variables at all costs (explicitly pass the function variables where they are needed)
+
+- Avoid namespace clashes with variable scopes
+
+- Some data processing functionalities could be implemented easier and more straight-forward with ``Pandas`` module infrastructure, try using the existing infrastructure more, rather than reinventing the wheel.
+
+- We may need to move on from ``Bokeh`` to ``D3.js`` eventually, if a fundamental/critical limitation was to be found with Bokeh. (I think I am seeing the limitations too, and I've been already playing on that level of threshold and pushing Bokeh to its limitations)
